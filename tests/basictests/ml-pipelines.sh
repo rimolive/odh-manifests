@@ -25,10 +25,13 @@ function check_ui_overlay() {
 
 function create_pipeline() {
     header "Creating a pipeline"
-    oc expose service ml-pipeline
+    route=`oc get route ml-pipeline || echo ""`
+    if [[ -z $route ]]; then
+        oc expose service ml-pipeline
+    fi
     ROUTE=$(oc get route ml-pipeline --template={{.spec.host}})
     PIPELINE_ID=$(curl -s -F "uploadfile=@${RESOURCEDIR}/ml-pipelines/test-pipeline-run.yaml" ${ROUTE}/apis/v1beta1/pipelines/upload | jq -r .id)
-    os::cmd::try_until_text "curl -s ${ROUTE}/apis/v1beta1/pipelines/${PIPELINE_ID} | jq '.name'" "test-pipeline-run.yaml" $odhdefaulttimeout $odhdefaultinterval
+    os::cmd::try_until_not_text "curl -s ${ROUTE}/apis/v1beta1/pipelines/${PIPELINE_ID} | jq" "null" $odhdefaulttimeout $odhdefaultinterval
 }
 
 function list_pipelines() {
@@ -39,7 +42,7 @@ function list_pipelines() {
 function create_run() {
     header "Creating a run"
     RUN_ID=$(curl -s -H "Content-Type: application/json" -X POST ${ROUTE}/apis/v1beta1/runs -d "{\"name\":\"test-pipeline-run_run\", \"pipeline_spec\":{\"pipeline_id\":\"${PIPELINE_ID}\"}}" | jq -r .run.id)
-    os::cmd::try_until_text "curl -s ${ROUTE}/apis/v1beta1/runs/${RUN_ID} | jq '.run.id'" "$RUN_ID" $odhdefaulttimeout $odhdefaultinterval
+    os::cmd::try_until_not_text "curl -s ${ROUTE}/apis/v1beta1/runs/${RUN_ID} | jq '" "null" $odhdefaulttimeout $odhdefaultinterval
 }
 
 function list_runs() {
@@ -59,16 +62,20 @@ function setup_monitoring() {
 
 function test_metrics() {
     header "Checking metrics for total number of runs, should be 1 since we have spun up 1 run"
-    monitoring_token=`oc sa get-token prometheus-k8s -n openshift-monitoring`
-    os::cmd::try_until_text "oc -n openshift-monitoring exec -c prometheus prometheus-k8s-0 -- curl -k -H \"Authorization: Bearer $monitoring_token\" 'https://thanos-querier.openshift-monitoring.ROUTE:9091/api/v1/query?query=run_server_run_count' | jq '.data.result[0].value[1]'" "1" $odhdefaulttimeout $odhdefaultinterval
+    ## On OCP 4.11, get-token is removed
+    cluster_version=`oc get -o json clusterversion | jq '.items[0].status.desired.version' | grep "4.11" || echo ""`
+    if [[ -z $cluster_version ]]; then
+        monitoring_token=`oc sa get-token prometheus-k8s -n openshift-monitoring`
+    else
+        monitoring_token=`oc create token prometheus-k8s -n openshift-monitoring`
+    fi
+    os::cmd::try_until_text "oc -n openshift-monitoring exec -c prometheus prometheus-k8s-0 -- curl -k -H \"Authorization: Bearer $monitoring_token\" 'https://thanos-querier.openshift-monitoring:9091/api/v1/query?query=run_server_run_count' | jq '.data.result[0].value[1]'" "1" $odhdefaulttimeout $odhdefaultinterval
 }
 
 function delete_runs() {
     header "Deleting runs"
     os::cmd::try_until_text "curl -s -X DELETE ${ROUTE}/apis/v1beta1/runs/${RUN_ID} | jq" "" $odhdefaulttimeout $odhdefaultinterval
     os::cmd::try_until_text "curl -s ${ROUTE}/apis/v1beta1/runs/${RUN_ID} | jq '.code'" "5" $odhdefaulttimeout $odhdefaultinterval
-    os::cmd::try_until_text "oc get PipelineRun" "No resources found" $odhdefaulttimeout $odhdefaultinterval
-    os::cmd::try_until_text "oc get TaskRun" "No resources found" $odhdefaulttimeout $odhdefaultinterval
 }
 
 function delete_pipeline() {
@@ -81,11 +88,11 @@ check_ui_overlay
 create_pipeline
 list_pipelines
 create_run
-# list_runs
-# check_run_status
-# setup_monitoring
-# test_metrics
-# delete_runs
+list_runs
+check_run_status
+setup_monitoring
+test_metrics
+delete_runs
 delete_pipeline
 oc delete route ml-pipeline
 
