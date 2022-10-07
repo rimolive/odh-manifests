@@ -20,17 +20,17 @@ function check_resources() {
 
 function check_ui_overlay() {
     header "Checking UI overlay Kfdef deploys the UI"
-    os::cmd::try_until_text "oc get pods -l app=ml-pipeline-ui --field-selector='status.phase=Running' -o jsonpath='{$.items[*].metadata.name}' | wc -w" "1" $odhdefaulttimeout $odhdefaultinterval
+    os::cmd::try_until_text "oc get pods -l app=ds-pipeline-ui --field-selector='status.phase=Running' -o jsonpath='{$.items[*].metadata.name}' | wc -w" "1" $odhdefaulttimeout $odhdefaultinterval
 }
 
 function create_pipeline() {
     header "Creating a pipeline"
-    route=`oc get route ml-pipeline || echo ""`
+    route=`oc get route ds-pipeline || echo ""`
     if [[ -z $route ]]; then
-        oc expose service ml-pipeline
+        oc expose service ds-pipeline
     fi
-    ROUTE=$(oc get route ml-pipeline --template={{.spec.host}})
-    PIPELINE_ID=$(curl -s -F "uploadfile=@${RESOURCEDIR}/ml-pipelines/test-pipeline-run.yaml" ${ROUTE}/apis/v1beta1/pipelines/upload | jq -r .id)
+    ROUTE=$(oc get route ds-pipeline --template={{.spec.host}})
+    PIPELINE_ID=$(curl -s -F "uploadfile=@${RESOURCEDIR}/ds-pipelines/test-pipeline-run.yaml" ${ROUTE}/apis/v1beta1/pipelines/upload | jq -r .id)
     os::cmd::try_until_not_text "curl -s ${ROUTE}/apis/v1beta1/pipelines/${PIPELINE_ID} | jq" "null" $odhdefaulttimeout $odhdefaultinterval
 }
 
@@ -94,6 +94,6 @@ setup_monitoring
 test_metrics
 delete_runs
 delete_pipeline
-oc delete route ml-pipeline
+oc delete route ds-pipeline
 
 os::test::junit::declare_suite_end
