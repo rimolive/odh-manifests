@@ -4,7 +4,7 @@ metadata:
   annotations:
     alpha.image.policy.openshift.io/resolve-names: 'visualization-server:1.3.1'
     image.openshift.io/triggers: >-
-      [{"from":{"kind":"ImageStreamTag","name":"visualization-server:1.3.1"},"fieldPath":"spec.template.spec.containers[?(@.name==\"ds-pipeline-visualizationserver\")].image"}]
+      [{"from":{"kind":"ImageStreamTag","name":"visualization-server:1.3.1"},"fieldPath":"spec.template.spec.containers[?(@.name==\"ml-pipeline-visualizationserver\")].image"}]
   labels:
     app: ds-pipeline-visualizationserver
     application-crd-id: data-science-pipelines
